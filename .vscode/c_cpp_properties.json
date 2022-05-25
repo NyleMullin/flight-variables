@@ -1,19 +1,22 @@
 {
     "configurations": [
         {
-            "name": "Win32",
+            "name": "GCC",
             "includePath": [
                 "${workspaceFolder}/**",
-                "C:\\MSFS SDK\\SimConnect SDK\\include\\"
+                "C:\\MSFS SDK\\SimConnect SDK\\include\\",
+                "${workspaceFolder}/websocketpp"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "ASIO_STANDALONE",
+                "_WEBSOCKETPP_CPP11_THREAD_"
             ],
-            "compilerPath": "C:\\msys64\\mingw64\\bin\\gcc.exe",
-            "cStandard": "gnu17",
-            "cppStandard": "gnu++17",
+            "compilerPath": "C:\\msys64\\mingw64\\bin\\g++.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
             "intelliSenseMode": "windows-gcc-x64"
         }
     ],
