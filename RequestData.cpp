@@ -30,13 +30,14 @@ typedef struct {
     float speedValue = 0.0;
 } ConnectionContext;
 
+static const double PI = 3.14159265358979323846;
 
 // Handlers
 void on_open(ConnectionContext* context, websocketpp::connection_hdl handle) {
     std::string msg = "Hello";
     context->mConnectionHandle = handle;
-    context->mClient.send(handle,msg,websocketpp::frame::opcode::text);
-    context->mClient.get_alog().write(websocketpp::log::alevel::app, "Sent Message: "+msg);
+    // context->mClient.send(handle,msg,websocketpp::frame::opcode::text);
+    // context->mClient.get_alog().write(websocketpp::log::alevel::app, "Sent Message: "+msg);
 }
 
 void on_fail(ConnectionContext* context, websocketpp::connection_hdl hdl) {
@@ -62,7 +63,7 @@ struct StructOneDatum {
 };
 
 // maxReturnedItems is 5 in this case, as the sample requests alt, lat, lon, head and speed
-#define maxReturnedItems    1
+#define maxReturnedItems    5
 
 // A structure that can be used to receive Tagged data
 struct StructDatum {
@@ -86,7 +87,7 @@ enum DATA_NAMES {
     DATA_PLANE_LATITUDE,
     DATA_PLANE_LONGITUDE,
     DATA_PLANE_HEADING_DEGREES_TRUE,
-    DATA_VERTICAL_SPEED,
+    DATA_GROUND_SPEED,
 };
 
 void CALLBACK MyDispatchProcPDR(SIMCONNECT_RECV* pData, DWORD cbData, void *pContext)
@@ -135,40 +136,36 @@ void CALLBACK MyDispatchProcPDR(SIMCONNECT_RECV* pData, DWORD cbData, void *pCon
                     while (count < (int) pObjData->dwDefineCount)
                     {
                         std::ostringstream ss;
-                        // std::string s = ss.str();
-
-                        // ss << "{ position: { latitude: " << latS << ", longitude: " << lonS << ", altitude: " << aS << ",}, heading: " << hS << ", speed: " << sS << ",}";
-                        // connectionContext->mClient.send(connectionContext->mConnectionHandle, ss.str(), websocketpp::frame::opcode::text);
 
                         switch (pS->datum[count].id)
                         {
                         case DATA_PLANE_ALTITUDE:
-                            connectionContext->altitudeValue = pS->datum[count].value;
-                            // printf("\nDATA_PLANE_ALTITUDE: %d", pS->datum[count].value);
+                            connectionContext->altitudeValue = pS->datum[count].value * 0.3048;
+                            printf("DATA_PLANE_ALTITUDE: %lf (raw %f)\n", pS->datum[count].value * 0.3048, pS->datum[count].value);
                             break;
 
                         case DATA_PLANE_LATITUDE:
-                            connectionContext->latitudeValue = pS->datum[count].value;
-                            // printf("\nDATA_PLANE_LATITUDE: %d", pS->datum[count].value);
+                            connectionContext->latitudeValue = pS->datum[count].value * 180 / PI;
+                            printf("DATA_PLANE_LATITUDE: %lf (raw %f)\n", pS->datum[count].value * 180 / PI, pS->datum[count].value);
                             break;
 
                         case DATA_PLANE_LONGITUDE:
-                            connectionContext->longitudeValue = pS->datum[count].value;
-                            // printf("\nDATA_PLANE_LONGITUDE: %d", pS->datum[count].value);
+                            connectionContext->longitudeValue = pS->datum[count].value * 180 / PI;
+                            printf("DATA_PLANE_LONGITUDE: %lf (raw %f)\n", pS->datum[count].value * 180 / PI, pS->datum[count].value);
                             break;
 
                         case DATA_PLANE_HEADING_DEGREES_TRUE:
-                            connectionContext->headingValue = pS->datum[count].value;
-                            // printf("\nDATA_PLANE_HEADING_DEGREES_TRUE: %d", pS->datum[count].value);
+                            connectionContext->headingValue = pS->datum[count].value * 180 / PI;
+                            printf("DATA_PLANE_HEADING_DEGREES_TRUE: %lf (raw %f)\n", pS->datum[count].value * 180 / PI, pS->datum[count].value);
                             break;
 
-                        case DATA_VERTICAL_SPEED:
-                            connectionContext->speedValue = pS->datum[count].value;
-                            // printf("\nDATA_VERTICAL_SPEED: %d", pS->datum[count].value);
+                        case DATA_GROUND_SPEED:
+                            connectionContext->speedValue = pS->datum[count].value * 0.514444;
+                            printf("DATA_GROUND_SPEED: %lf (raw %f)\n", pS->datum[count].value * 0.514444, pS->datum[count].value);
                             break;
 
                         default:
-                            printf("\nUnknown datum ID: %d", pS->datum[count].id);
+                            printf("Unknown datum ID: %d\n", pS->datum[count].id);
                             break;
                         }
                         ++count;
@@ -208,8 +205,10 @@ void sendCurrentState(ConnectionContext* context, const asio::error_code& /*e*/)
         << "},\"heading\":" << context->headingValue
         << ",\"speed\":" << context->speedValue << "}";
 
-    if (context->latitudeValue =! 0 && context->longitudeValue != 0) {
-        context->mClient.send(context->mConnectionHandle, ss.str(), websocketpp::frame::opcode::text);
+    if (context->latitudeValue != 0 && context->longitudeValue != 0) {
+        std::string sentmessage = ss.str();
+        std::cout << sentmessage << std::endl;
+        context->mClient.send(context->mConnectionHandle, sentmessage, websocketpp::frame::opcode::text);
     }
     pTimer->expires_after(asio::chrono::seconds(1));
     pTimer->async_wait(bind(&sendCurrentState, context, ::_1));
@@ -220,7 +219,8 @@ void testTaggedDataRequest()
     HRESULT hr;
     ConnectionContext connectionContext;
 
-    std::string uri = "ws://localhost:10000/";
+    // std::string uri = "ws://localhost:10000/";
+    std::string uri = "ws://dev01:8479/";
 
     // set logging policy if needed
     connectionContext.mClient.clear_access_channels(websocketpp::log::alevel::frame_header);
@@ -249,8 +249,6 @@ void testTaggedDataRequest()
         
         websocketpp::lib::shared_ptr<websocketpp::lib::thread> m_thread;
         m_thread.reset(new websocketpp::lib::thread(&client::run, &connectionContext.mClient));
-        // Start the ASIO io_service run loop
-        // c.run();
         
         printf("\nSmith Myers established connection to SimConnect");   
         
@@ -259,16 +257,16 @@ void testTaggedDataRequest()
         // The number of entries in the DEFINITION_PDR definition should be equal to
         // the maxReturnedItems define
 
-        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE ALTITUDE", "feet",
+        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE ALTITUDE", "Feet",
                                             SIMCONNECT_DATATYPE_FLOAT32, 0, DATA_PLANE_ALTITUDE);
-        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE LATITUDE", "feet",
+        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE LATITUDE", "Radians",
                                             SIMCONNECT_DATATYPE_FLOAT32, 0, DATA_PLANE_LATITUDE);
-        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE LONGITUDE", "feet",
+        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE LONGITUDE", "Radians",
                                             SIMCONNECT_DATATYPE_FLOAT32, 0, DATA_PLANE_LONGITUDE);
         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "PLANE HEADING DEGREES TRUE", "Radians",
                                             SIMCONNECT_DATATYPE_FLOAT32, 0, DATA_PLANE_HEADING_DEGREES_TRUE);
-        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "VERTICAL SPEED", "feet per second",
-                                            SIMCONNECT_DATATYPE_FLOAT32, 0, DATA_VERTICAL_SPEED);
+        hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_PDR, "GROUND VELOCITY", "Knots",
+                                            SIMCONNECT_DATATYPE_FLOAT32, 0, DATA_GROUND_SPEED);
 
         // Request a simulation start event
         hr = SimConnect_SubscribeToSystemEvent(hSimConnect, EVENT_SIM_START, "SimStart");
