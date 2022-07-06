@@ -6,6 +6,10 @@
 #include <strsafe.h>
 #include <sstream>
 #include <mutex>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <limits>
 
 #include <websocketpp/config/asio_no_tls_client.hpp>
 #include <websocketpp/client.hpp>
@@ -210,7 +214,7 @@ void sendCurrentState(ConnectionContext* context, const asio::error_code& /*e*/)
         std::cout << sentmessage << std::endl;
         context->mClient.send(context->mConnectionHandle, sentmessage, websocketpp::frame::opcode::text);
     }
-    pTimer->expires_after(asio::chrono::seconds(1));
+    pTimer->expires_after(asio::chrono::milliseconds(500)); // Make this 0.5 seconds
     pTimer->async_wait(bind(&sendCurrentState, context, ::_1));
 }
 
@@ -219,8 +223,14 @@ void testTaggedDataRequest()
     HRESULT hr;
     ConnectionContext connectionContext;
 
+    std::ifstream ifs("fileUri.txt");
+  
+    std::string content((std::istreambuf_iterator<char>(ifs)),(std::istreambuf_iterator<char>()));
+
+    std::string uri = content;
+
     // std::string uri = "ws://localhost:10000/";
-    std::string uri = "ws://dev01:8479/";
+    // std::string uri = "ws://dev01:8479/";
 
     // set logging policy if needed
     connectionContext.mClient.clear_access_channels(websocketpp::log::alevel::frame_header);
@@ -281,8 +291,107 @@ void testTaggedDataRequest()
     }
 }
 
+std::string changeUri(void) {
+  // change the uri
+
+  std::string localString = "astrobleme";
+  std::cout << "\nEnter new uri: ";
+  getline(std::cin, localString);
+
+  std::cin >> localString;
+  std::cout << localString;
+  std::ofstream out("fileUri.txt");
+  out << localString;
+  out.close();
+
+  return localString;
+  
+}
+
+int quitNow(void) {
+
+  std::string choice;
+  
+  std::cout << "\nAre you sure(Y/N)?";
+  std::cin >> choice;
+
+  if(choice == "y" || choice == "Y" || choice == "Yes" || choice == "yes") {
+    std::cout << "\n\nEnd of line\n";
+	  exit(EXIT_SUCCESS);
+  }
+  else {
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    return 1;
+  }
+}
+
+void menu(void) {
+  // Menu function for uri setup
+  std::string modifedUri;
+  
+  std::fstream fileStream;
+
+  fileStream.open("fileUri.txt");
+    if (fileStream.fail()) {
+        std::cout << "DataRequest v1.0\n\nFirst Time Setup\n\nPlease enter uri of Simulator: (example) ws://dev01:8479/\n";
+        std::cin >> modifedUri;
+        std::cout << modifedUri;
+        std::ofstream out("fileUri.txt");
+        out << modifedUri;
+        out.close();
+        // file could not be opened meaning it does not exists = First time setup
+        menu();
+      }
+  
+  std::ifstream ifs("fileUri.txt");
+  
+  std::string content((std::istreambuf_iterator<char>(ifs)),(std::istreambuf_iterator<char>()));
+
+  modifedUri = content;
+
+  int menuOption;
+
+  bool bFail; // declaing and initialise variable to detect a false input
+  
+  std::cout << "\033c";
+  std::cout << "DataRequest v1.0\n\nwebsocket uri program\n\n"; //display a title
+  std::cout << "Start Sim by hitting any key or please select a function or enter 1 to quit\n";
+  std::cout << "\t0. Use current uri (current uri is: " << modifedUri << ").\n";
+  std::cout << "\t1. Modify the current uri\n";
+  std::cout << "\t2. Quit\n";
+  std::cout << "\tUri is currently: " << modifedUri << "\n";
+  std::cout << "\nPlease enter a valid option (0 - 1 or 2 to quit):\n";
+  std::cin >> menuOption; //store the choice made by the user in the variable menuOption
+  
+  bFail = std::cin.fail(); //calling the bool and giving it a false value
+    
+  switch(menuOption){
+    case 0:
+        break;
+    case 1:
+        modifedUri = changeUri();
+        menu();
+        break;
+    case 2:
+        quitNow();
+          if (quitNow() == 1) {
+            menu();
+          }
+        break;
+    default:
+        // std::cout << menuOption << " is not a valid option, please input a valid option\n";
+        // std::cin.clear();
+        // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        // Menu();
+        break;
+    }
+}
+
 int __cdecl _tmain(int argc, _TCHAR* argv[])
 {
+
+    menu();
 
     testTaggedDataRequest();
 
